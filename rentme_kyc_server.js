@@ -1,91 +1,68 @@
-// rentme_kyc_server.js — Production Cloud Run version
-// Compatible Node 18+, Express 5.x
-// Includes all required endpoints for the RentMe iOS KYC flow.
+// RentMe KYC backend - production version for Cloud Run
+// Includes full JSON responses expected by the iOS app
+// Endpoints: /v1/kyc/status and /v1/kyc/session
+// Compatible with Cloud Run (listens on process.env.PORT)
 
-import express from "express";
-import bodyParser from "body-parser";
-import cors from "cors";
+import express from 'express';
+import bodyParser from 'body-parser';
+import cors from 'cors';
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// ------------------------------------------------------------
-// Health & root endpoints
-// ------------------------------------------------------------
-
-// Cloud Run health check
-app.get("/health", (req, res) => {
-  res.status(200).send("ok");
+// ---- Health ----
+app.get('/health', (req, res) => {
+  res.status(200).json({ ok: true, service: 'kyc', message: 'KYC service healthy', env: process.env.ENV || 'prod' });
 });
 
-// Default root route
-app.get("/", (req, res) => {
-  res.status(200).send("RentMe KYC backend is running");
+// ---- Root ----
+app.get('/', (req, res) => {
+  res.status(200).json({ ok: true, service: 'kyc', message: 'KYC service online', env: process.env.ENV || 'prod' });
 });
 
-// ------------------------------------------------------------
-// KYC return handler (already used for hosted flow return URL)
-// ------------------------------------------------------------
-app.post("/kyc/return", async (req, res) => {
+// ---- v1/kyc/status ----
+// Simulates returning current KYC status for user
+app.get('/v1/kyc/status', (req, res) => {
+  const now = new Date().toISOString();
+  res.status(200).json({
+    status: 'not_started',      // could be not_started | pending | verified | rejected
+    session_id: 'kyc_session_stub_001',
+    updatedAt: now
+  });
+});
+
+// ---- v1/kyc/session ----
+// Simulates creation of a KYC session
+app.post('/v1/kyc/session', (req, res) => {
+  const now = new Date().toISOString();
+  res.status(200).json({
+    status: 'pending',
+    session_id: 'kyc_session_' + Math.random().toString(36).substring(2, 10),
+    url: 'https://example.com/kyc/session-placeholder',
+    createdAt: now
+  });
+});
+
+// ---- v1/kyc/return ----
+// Handles provider webhook callback (stub)
+app.post('/v1/kyc/return', async (req, res) => {
   try {
-    const eventData = req.body || {};
-    console.log("Received KYC return payload:", eventData);
-    res.status(200).json({ success: true });
+    console.log('Received KYC return payload:', req.body);
+    res.status(200).json({ ok: true, message: 'Webhook processed' });
   } catch (err) {
-    console.error("Error handling /kyc/return:", err);
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error('Error in /v1/kyc/return:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-// ------------------------------------------------------------
-// v1 KYC API endpoints expected by the iOS app
-// ------------------------------------------------------------
-
-// Simple health / status endpoint for KYC module
-app.get("/v1/kyc/status", async (req, res) => {
-  try {
-    res.status(200).json({
-      ok: true,
-      service: "kyc",
-      message: "KYC service online",
-      env: process.env.ENV || "unknown",
-    });
-  } catch (err) {
-    console.error("Status error:", err);
-    res.status(500).json({ ok: false, error: "Internal server error" });
-  }
-});
-
-// Stub endpoint for session creation (to be wired to Stripe Identity)
-app.post("/v1/kyc/session", async (req, res) => {
-  try {
-    const payload = req.body || {};
-    console.log("Received KYC session request:", payload);
-
-    // TODO: integrate with Stripe Identity (createVerificationSession)
-    // Example placeholder response
-    res.status(200).json({
-      ok: true,
-      message: "Stub session created successfully",
-      sessionUrl: "https://example.com/kyc/session-placeholder",
-    });
-  } catch (err) {
-    console.error("Session error:", err);
-    res.status(500).json({ ok: false, error: "Internal server error" });
-  }
-});
-
-// ------------------------------------------------------------
-// Environment validation & startup
-// ------------------------------------------------------------
-
-// Warn if Stripe key is missing (but don't crash)
+// ---- Safety for missing STRIPE key ----
 if (!process.env.STRIPE_SECRET_KEY) {
-  console.warn("⚠️  STRIPE_SECRET_KEY is not defined in environment variables.");
+  console.warn('⚠️ STRIPE_SECRET_KEY not found. Continuing with stub mode.');
 }
 
+// ---- Start server ----
 const port = process.env.PORT || 8080;
-app.listen(port, "0.0.0.0", () => {
-  console.log(`✅ RentMe KYC backend listening on port ${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`✅ RentMe KYC backend running on port ${port}`);
 });
